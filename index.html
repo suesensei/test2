@@ -39,7 +39,7 @@ const items=[...Array(TOTAL)].map((_,i)=>{
 });
 const correctSfx="audio/correct.mp3";
 const wrongSfx="audio/wrong.mp3";
-const clearSfx="audio/clear.mp3"; // ★ iOS 用ファンファーレ / fallback 音声
+const clearSfx="audio/clear.mp3"; // fallback 効果音
 // =====================================================
 let current=null;
 let score=0,attempts=0;
@@ -60,7 +60,7 @@ function render(){
 }
 function getRemainingCards(){return [...document.querySelectorAll('#game .card')];}
 function startTimer(){
-  if(startTime!==null)return; // すでに動いている
+  if(startTime!==null)return;
   startTime=Date.now();
   timerInterval=setInterval(()=>{
     const t=((Date.now()-startTime)/1000).toFixed(1);
@@ -70,38 +70,37 @@ function startTimer(){
 function speakMessage(msg){
   return new Promise(resolve=>{
     if(!('speechSynthesis' in window)){resolve(false);return;}
-    const voices=window.speechSynthesis.getVoices();
-    const jaVoice=voices.find(v=>v.lang&&v.lang.startsWith('ja'));
     const utter=new SpeechSynthesisUtterance(msg);
     utter.lang='ja-JP';
-    if(jaVoice)utter.voice=jaVoice;
     utter.onend=()=>resolve(true);
     utter.onerror=()=>resolve(false);
-    // iOS 対策: voices がまだロードされていない場合
+    const voices=window.speechSynthesis.getVoices();
+    const jaVoice=voices.find(v=>v.lang&&v.lang.startsWith('ja'));
+    if(jaVoice)utter.voice=jaVoice;
     if(!voices.length){
       window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.speak(utter);
     }
-    window.speechSynthesis.cancel(); // リセット
+    window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utter);
   });
 }
-async function celebrate(totalTime){
-  const msg=`おめでとう！${totalTime}秒でクリアしました！`;
-  const spoken=await speakMessage(msg);
-  if(!spoken){ // fallback
-    new Audio(clearSfx).play();
-  }
-  // コンフェッティ（10秒間）
+function launchConfetti(){
   for(let i=0;i<120;i++){
     const conf=document.createElement('div');
     conf.className='confetti';
     conf.style.left=Math.random()*100+'vw';
     conf.style.backgroundColor=`hsl(${Math.random()*360},70%,60%)`;
-    conf.style.animationDuration=8+Math.random()*2+'s'; // 8–10s
+    conf.style.animationDuration=8+Math.random()*2+'s';
     conf.style.transform=`rotate(${Math.random()*360}deg)`;
     document.body.appendChild(conf);
     setTimeout(()=>conf.remove(),11000);
   }
+}
+async function celebrate(totalTime){
+  const msg=`おめでとう！${totalTime}秒でクリアしました！`;
+  const spoken=await speakMessage(msg);
+  if(!spoken){ new Audio(clearSfx).play(); }
+  launchConfetti();
 }
 function finishGame(){
   if(timerInterval){clearInterval(timerInterval);}  
@@ -116,6 +115,16 @@ function playRandomSound(){
   new Audio(current.audio).play();
 }
 function updateScore(){scoreP.textContent=`Score: ${score} / ${attempts}`;}
+function proceedNext(delay=400){
+  setTimeout(()=>{
+    const remaining=getRemainingCards();
+    if(!remaining.length){
+      finishGame();
+    }else{
+      playRandomSound();
+    }
+  },delay);
+}
 // クリック/タッチ処理
 gameDiv.addEventListener('click',e=>{
   const card=e.target.closest('.card');
@@ -123,19 +132,19 @@ gameDiv.addEventListener('click',e=>{
   attempts++;
   if(card.dataset.name===current.name){
     score++; card.classList.add('correct');
-    const sfx=new Audio(correctSfx);
-    sfx.onended=playRandomSound;
-    sfx.play();
+    new Audio(correctSfx).play();
     setTimeout(()=>card.remove(),300);
+    updateScore();
+    current=null;
+    proceedNext(500); // after removal
   }else{
     card.classList.add('wrong');
-    const sfx=new Audio(wrongSfx);
-    sfx.onended=playRandomSound;
-    sfx.play();
+    new Audio(wrongSfx).play();
     setTimeout(()=>card.classList.remove('wrong'),800);
+    updateScore();
+    current=null;
+    proceedNext(800);
   }
-  updateScore();
-  current=null;
 });
 // ボタン操作
 document.getElementById('startBtn').addEventListener('click',()=>{startTimer();playRandomSound();});
