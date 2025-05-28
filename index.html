@@ -8,8 +8,9 @@
     body{margin:0;font-family:system-ui,sans-serif;text-align:center;background:#f0f8ff;}
     h1{margin:20px 0 10px;font-size:1.8rem;}
     #score,#timer{font-size:1.1rem;margin:6px 0;}
-    #game{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;max-width:900px;margin:0 auto 24px;padding:0 12px;}
-    .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;}
+    /* 固定幅のカードを保持しつつレスポンシブ */
+    #game{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;max-width:900px;margin:0 auto 24px;padding:0 12px;}
+    .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;max-width:140px;margin:0 auto;} /* max-width で拡大し過ぎを防止 */
     .card:hover{transform:scale(1.05);}  
     .card img{width:100%;height:auto;display:block;user-select:none;}
     .card.correct{border-color:#4caf50;}
