@@ -10,7 +10,7 @@
     #score{font-size:1.1rem;margin:8px 0 16px;}
     #game{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;max-width:900px;margin:0 auto 24px;padding:0 12px;}
     .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;}
-    .card:hover{transform:scale(1.05);}
+    .card:hover{transform:scale(1.05);}  
     .card img{width:100%;height:auto;display:block;user-select:none;}
     .card.correct{border-color:#4caf50;}
     .card.wrong{border-color:#f44336;}
@@ -28,21 +28,16 @@
   </div>
 <script>
 // ================= 設定エリア =================
-// 画像ファイルは images フォルダ、音声ファイルは audio フォルダに保存してください。
-// ファイル名は A(1).png / A(1).mp3 のように括弧付き数字でそろえます。
 const TOTAL=24;
 const items=[...Array(TOTAL)].map((_,i)=>{
-  const n=i+1;
-  const label=`A(${n})`;
+  const label=`A(${i+1})`;
   return {name:label,img:`images/${label}.png`,audio:`audio/${label}.mp3`};
 });
-// 効果音
 const correctSfx="audio/correct.mp3";
 const wrongSfx="audio/wrong.mp3";
 // =====================================================
-let current=null; // 現在再生中のitemオブジェクト
-let score=0;
-let attempts=0;
+let current=null;
+let score=0,attempts=0;
 const gameDiv=document.getElementById("game");
 const scoreP=document.getElementById("score");
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
@@ -52,30 +47,32 @@ function render(){
     const div=document.createElement("div");
     div.className="card";
     div.dataset.name=item.name;
-    const img=document.createElement("img");
-    img.src=item.img;
-    img.alt=item.name;
-    div.appendChild(img);
+    div.innerHTML=`<img src="${item.img}" alt="${item.name}">`;
     gameDiv.appendChild(div);
   });
 }
+function getRemainingCards(){return [...document.querySelectorAll('#game .card')];}
 function playRandomSound(){
-  const remainingCards=[...document.querySelectorAll('#game .card')];
-  if(!remainingCards.length){alert('Great job! All matched!');return;}
-  const randomCard=remainingCards[Math.floor(Math.random()*remainingCards.length)];
+  const remaining=getRemainingCards();
+  if(!remaining.length){alert('Great job! All matched!');return;}
+  const randomCard=remaining[Math.floor(Math.random()*remaining.length)];
   current=items.find(it=>it.name===randomCard.dataset.name);
   new Audio(current.audio).play();
 }
 function updateScore(){scoreP.textContent=`Score: ${score} / ${attempts}`;}
 // クリック/タッチ処理
-gameDiv.addEventListener("click",e=>{
+gameDiv.addEventListener('click',e=>{
   const card=e.target.closest('.card');
   if(!card||!current)return;
   attempts++;
   if(card.dataset.name===current.name){
-    score++;
-    card.classList.add('correct');
-    new Audio(correctSfx).play();
+    score++; card.classList.add('correct');
+    const sfx=new Audio(correctSfx);
+    sfx.onended=()=>{ // 効果音終了後に次の音を自動再生
+      playRandomSound();
+    };
+    sfx.play();
+    // カード削除は効果音再生中でもすぐに行う
     setTimeout(()=>card.remove(),300);
   }else{
     card.classList.add('wrong');
