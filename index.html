@@ -5,45 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sound & Picture Matching Game</title>
   <style>
-    body{
-      margin:0;
-      font-family:system-ui, sans-serif;
-      text-align:center;
-      background:#f0f8ff;
-    }
-    h1{margin-top:20px; font-size:1.8rem;}
-    #score{font-size:1.1rem; margin:8px 0 16px;}
-    #game{
-      display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(100px,1fr));
-      gap:12px;
-      max-width:900px;
-      margin:0 auto 24px;
-      padding:0 12px;
-    }
-    .card{
-      position:relative;
-      cursor:pointer;
-      border:2px solid #ccc;
-      border-radius:12px;
-      overflow:hidden;
-      background:#fff;
-      transition:transform .15s, border-color .15s;
-    }
+    body{margin:0;font-family:system-ui,sans-serif;text-align:center;background:#f0f8ff;}
+    h1{margin-top:20px;font-size:1.8rem;}
+    #score{font-size:1.1rem;margin:8px 0 16px;}
+    #game{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;max-width:900px;margin:0 auto 24px;padding:0 12px;}
+    .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;}
     .card:hover{transform:scale(1.05);}
-    .card img{width:100%; height:auto; display:block; user-select:none;}
+    .card img{width:100%;height:auto;display:block;user-select:none;}
     .card.correct{border-color:#4caf50;}
     .card.wrong{border-color:#f44336;}
-    #controls{margin-bottom:24px; display:flex; justify-content:center; gap:12px; flex-wrap:wrap;}
-    button{
-      padding:10px 18px;
-      font-size:1rem;
-      border:none;
-      border-radius:8px;
-      cursor:pointer;
-      box-shadow:0 2px 4px rgba(0,0,0,0.2);
-    }
-    button:active{transform:translateY(2px);}
+    #controls{margin-bottom:24px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
+    button{padding:10px 18px;font-size:1rem;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);}button:active{transform:translateY(2px);}  
   </style>
 </head>
 <body>
@@ -58,29 +30,22 @@
 // ================= 設定エリア =================
 // 画像ファイルは images フォルダ、音声ファイルは audio フォルダに保存してください。
 // ファイル名は A(1).png / A(1).mp3 のように括弧付き数字でそろえます。
-const items=[...Array(24)].map((_,i)=>{
-  const n=i+1; // 1~24
+const TOTAL=24;
+const items=[...Array(TOTAL)].map((_,i)=>{
+  const n=i+1;
   const label=`A(${n})`;
-  return {
-    name:label,
-    img:`images/${label}.png`,
-    audio:`audio/${label}.mp3`
-  };
+  return {name:label,img:`images/${label}.png`,audio:`audio/${label}.mp3`};
 });
+// 効果音
+const correctSfx="audio/correct.mp3";
+const wrongSfx="audio/wrong.mp3";
 // =====================================================
-let current=null;
+let current=null; // 現在再生中のitemオブジェクト
 let score=0;
 let attempts=0;
 const gameDiv=document.getElementById("game");
 const scoreP=document.getElementById("score");
-const playBtn=document.getElementById("playSound");
-function shuffle(arr){
-  for(let i=arr.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [arr[i],arr[j]]=[arr[j],arr[i]];
-  }
-  return arr;
-}
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
 function render(){
   gameDiv.innerHTML="";
   shuffle([...items]).forEach(item=>{
@@ -95,36 +60,35 @@ function render(){
   });
 }
 function playRandomSound(){
-  current=items[Math.floor(Math.random()*items.length)];
-  const audio=new Audio(current.audio);
-  audio.play();
+  const remainingCards=[...document.querySelectorAll('#game .card')];
+  if(!remainingCards.length){alert('Great job! All matched!');return;}
+  const randomCard=remainingCards[Math.floor(Math.random()*remainingCards.length)];
+  current=items.find(it=>it.name===randomCard.dataset.name);
+  new Audio(current.audio).play();
 }
-function updateScore(){
-  scoreP.textContent=`Score: ${score} / ${attempts}`;
-}
+function updateScore(){scoreP.textContent=`Score: ${score} / ${attempts}`;}
 // クリック/タッチ処理
 gameDiv.addEventListener("click",e=>{
-  const card=e.target.closest(".card");
+  const card=e.target.closest('.card');
   if(!card||!current)return;
   attempts++;
   if(card.dataset.name===current.name){
     score++;
-    card.classList.add("correct");
+    card.classList.add('correct');
+    new Audio(correctSfx).play();
+    setTimeout(()=>card.remove(),300);
   }else{
-    card.classList.add("wrong");
-    setTimeout(()=>card.classList.remove("wrong"),800);
+    card.classList.add('wrong');
+    new Audio(wrongSfx).play();
+    setTimeout(()=>card.classList.remove('wrong'),800);
   }
   updateScore();
   current=null;
 });
-playBtn.addEventListener("click",playRandomSound);
-
-document.getElementById("reset").addEventListener("click",()=>{
-  score=0;
-  attempts=0;
-  updateScore();
-  render();
-});
+// ボタン操作
+document.getElementById('playSound').addEventListener('click',playRandomSound);
+document.getElementById('reset').addEventListener('click',()=>{
+  score=0;attempts=0;updateScore();render();});
 // 初期表示
 render();
 </script>
