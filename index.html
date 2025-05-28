@@ -5,18 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sound & Picture Matching Game</title>
   <style>
-    body{margin:0;font-family:system-ui,sans-serif;text-align:center;background:#f0f8ff;}
+    body{margin:0;font-family:system-ui,sans-serif;text-align:center;background:#f0f8ff;overflow-x:hidden;}
     h1{margin:20px 0 10px;font-size:1.8rem;}
     #score,#timer{font-size:1.1rem;margin:6px 0;}
-    /* 固定幅のカードを保持しつつレスポンシブ */
     #game{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;max-width:900px;margin:0 auto 24px;padding:0 12px;}
-    .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;max-width:140px;margin:0 auto;} /* max-width で拡大し過ぎを防止 */
+    .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;max-width:140px;margin:0 auto;}
     .card:hover{transform:scale(1.05);}  
     .card img{width:100%;height:auto;display:block;user-select:none;}
     .card.correct{border-color:#4caf50;}
     .card.wrong{border-color:#f44336;}
     #controls{margin:0 0 12px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
     button{padding:10px 24px;font-size:1rem;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);}button:active{transform:translateY(2px);}  
+    /* Confetti */
+    .confetti{position:fixed;top:-20px;width:8px;height:8px;border-radius:50%;opacity:.9;pointer-events:none;animation:fall linear forwards;}
+    @keyframes fall{to{transform:translateY(100vh) rotate(360deg);}}
   </style>
 </head>
 <body>
@@ -64,10 +66,30 @@ function startTimer(){
     timerP.textContent=`Time: ${t} s`;
   },100);
 }
+function celebrate(totalTime){
+  // 1) 音声読み上げ
+  const msg=`おめでとう！${totalTime}秒でクリアしました！`;
+  if('speechSynthesis' in window){
+    const utter=new SpeechSynthesisUtterance(msg);
+    utter.lang='ja-JP';
+    speechSynthesis.speak(utter);
+  }
+  // 2) コンフェッティ演出
+  for(let i=0;i<120;i++){
+    const conf=document.createElement('div');
+    conf.className='confetti';
+    conf.style.left=Math.random()*100+'vw';
+    conf.style.backgroundColor=`hsl(${Math.random()*360},70%,60%)`;
+    conf.style.animationDuration=2+Math.random()*1.5+'s';
+    conf.style.transform=`rotate(${Math.random()*360}deg)`;
+    document.body.appendChild(conf);
+    setTimeout(()=>conf.remove(),4000);
+  }
+}
 function finishGame(){
   if(timerInterval){clearInterval(timerInterval);}  
   const totalTime=((Date.now()-startTime)/1000).toFixed(1);
-  alert(`Great job! All matched!\nTime: ${totalTime} s`);
+  celebrate(totalTime);
 }
 function playRandomSound(){
   const remaining=getRemainingCards();
