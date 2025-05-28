@@ -68,15 +68,14 @@ gameDiv.addEventListener('click',e=>{
   if(card.dataset.name===current.name){
     score++; card.classList.add('correct');
     const sfx=new Audio(correctSfx);
-    sfx.onended=()=>{ // 効果音終了後に次の音を自動再生
-      playRandomSound();
-    };
+    sfx.onended=playRandomSound;
     sfx.play();
-    // カード削除は効果音再生中でもすぐに行う
     setTimeout(()=>card.remove(),300);
   }else{
     card.classList.add('wrong');
-    new Audio(wrongSfx).play();
+    const sfx=new Audio(wrongSfx);
+    sfx.onended=playRandomSound;
+    sfx.play();
     setTimeout(()=>card.classList.remove('wrong'),800);
   }
   updateScore();
