@@ -74,16 +74,16 @@ function celebrate(totalTime){
     utter.lang='ja-JP';
     speechSynthesis.speak(utter);
   }
-  // 2) コンフェッティ演出
+  // 2) コンフェッティ演出（10秒間）
   for(let i=0;i<120;i++){
     const conf=document.createElement('div');
     conf.className='confetti';
     conf.style.left=Math.random()*100+'vw';
     conf.style.backgroundColor=`hsl(${Math.random()*360},70%,60%)`;
-    conf.style.animationDuration=2+Math.random()*1.5+'s';
+    conf.style.animationDuration=8+Math.random()*2+'s'; // 8–10s
     conf.style.transform=`rotate(${Math.random()*360}deg)`;
     document.body.appendChild(conf);
-    setTimeout(()=>conf.remove(),4000);
+    setTimeout(()=>conf.remove(),11000); // 11秒後に後始末
   }
 }
 function finishGame(){
