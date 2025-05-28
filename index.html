@@ -6,26 +6,27 @@
   <title>Sound & Picture Matching Game</title>
   <style>
     body{margin:0;font-family:system-ui,sans-serif;text-align:center;background:#f0f8ff;}
-    h1{margin-top:20px;font-size:1.8rem;}
-    #score{font-size:1.1rem;margin:8px 0 16px;}
+    h1{margin:20px 0 10px;font-size:1.8rem;}
+    #score,#timer{font-size:1.1rem;margin:6px 0;}
     #game{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;max-width:900px;margin:0 auto 24px;padding:0 12px;}
     .card{position:relative;cursor:pointer;border:2px solid #ccc;border-radius:12px;overflow:hidden;background:#fff;transition:transform .15s,border-color .15s;}
     .card:hover{transform:scale(1.05);}  
     .card img{width:100%;height:auto;display:block;user-select:none;}
     .card.correct{border-color:#4caf50;}
     .card.wrong{border-color:#f44336;}
-    #controls{margin-bottom:24px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
-    button{padding:10px 18px;font-size:1rem;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);}button:active{transform:translateY(2px);}  
+    #controls{margin:0 0 12px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
+    button{padding:10px 24px;font-size:1rem;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);}button:active{transform:translateY(2px);}  
   </style>
 </head>
 <body>
   <h1>Sound & Picture Matching</h1>
-  <p id="score">Score: 0 / 0</p>
-  <div id="game"></div>
   <div id="controls">
-    <button id="playSound">Play Sound 🔊</button>
-    <button id="reset">Reset Game 🔄</button>
+    <button id="startBtn">START 🔊</button>
+    <button id="reset">Reset 🔄</button>
   </div>
+  <p id="score">Score: 0 / 0</p>
+  <p id="timer">Time: 0.0 s</p>
+  <div id="game"></div>
 <script>
 // ================= 設定エリア =================
 const TOTAL=24;
@@ -38,8 +39,10 @@ const wrongSfx="audio/wrong.mp3";
 // =====================================================
 let current=null;
 let score=0,attempts=0;
+let startTime=null,timerInterval=null;
 const gameDiv=document.getElementById("game");
 const scoreP=document.getElementById("score");
+const timerP=document.getElementById("timer");
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
 function render(){
   gameDiv.innerHTML="";
@@ -52,9 +55,22 @@ function render(){
   });
 }
 function getRemainingCards(){return [...document.querySelectorAll('#game .card')];}
+function startTimer(){
+  if(startTime!==null)return; // すでに動いている
+  startTime=Date.now();
+  timerInterval=setInterval(()=>{
+    const t=((Date.now()-startTime)/1000).toFixed(1);
+    timerP.textContent=`Time: ${t} s`;
+  },100);
+}
+function finishGame(){
+  if(timerInterval){clearInterval(timerInterval);}  
+  const totalTime=((Date.now()-startTime)/1000).toFixed(1);
+  alert(`Great job! All matched!\nTime: ${totalTime} s`);
+}
 function playRandomSound(){
   const remaining=getRemainingCards();
-  if(!remaining.length){alert('Great job! All matched!');return;}
+  if(!remaining.length){finishGame();return;}
   const randomCard=remaining[Math.floor(Math.random()*remaining.length)];
   current=items.find(it=>it.name===randomCard.dataset.name);
   new Audio(current.audio).play();
@@ -82,9 +98,12 @@ gameDiv.addEventListener('click',e=>{
   current=null;
 });
 // ボタン操作
-document.getElementById('playSound').addEventListener('click',playRandomSound);
+document.getElementById('startBtn').addEventListener('click',()=>{startTimer();playRandomSound();});
 document.getElementById('reset').addEventListener('click',()=>{
-  score=0;attempts=0;updateScore();render();});
+  score=0;attempts=0;updateScore();
+  if(timerInterval){clearInterval(timerInterval);}startTime=null;timerP.textContent='Time: 0.0 s';
+  render();
+});
 // 初期表示
 render();
 </script>
