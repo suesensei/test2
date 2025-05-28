@@ -39,6 +39,7 @@ const items=[...Array(TOTAL)].map((_,i)=>{
 });
 const correctSfx="audio/correct.mp3";
 const wrongSfx="audio/wrong.mp3";
+const clearSfx="audio/clear.mp3"; // ★ iOS 用ファンファーレ / fallback 音声
 // =====================================================
 let current=null;
 let score=0,attempts=0;
@@ -66,15 +67,31 @@ function startTimer(){
     timerP.textContent=`Time: ${t} s`;
   },100);
 }
-function celebrate(totalTime){
-  // 1) 音声読み上げ
-  const msg=`おめでとう！${totalTime}秒でクリアしました！`;
-  if('speechSynthesis' in window){
+function speakMessage(msg){
+  return new Promise(resolve=>{
+    if(!('speechSynthesis' in window)){resolve(false);return;}
+    const voices=window.speechSynthesis.getVoices();
+    const jaVoice=voices.find(v=>v.lang&&v.lang.startsWith('ja'));
     const utter=new SpeechSynthesisUtterance(msg);
     utter.lang='ja-JP';
-    speechSynthesis.speak(utter);
+    if(jaVoice)utter.voice=jaVoice;
+    utter.onend=()=>resolve(true);
+    utter.onerror=()=>resolve(false);
+    // iOS 対策: voices がまだロードされていない場合
+    if(!voices.length){
+      window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.speak(utter);
+    }
+    window.speechSynthesis.cancel(); // リセット
+    window.speechSynthesis.speak(utter);
+  });
+}
+async function celebrate(totalTime){
+  const msg=`おめでとう！${totalTime}秒でクリアしました！`;
+  const spoken=await speakMessage(msg);
+  if(!spoken){ // fallback
+    new Audio(clearSfx).play();
   }
-  // 2) コンフェッティ演出（10秒間）
+  // コンフェッティ（10秒間）
   for(let i=0;i<120;i++){
     const conf=document.createElement('div');
     conf.className='confetti';
@@ -83,7 +100,7 @@ function celebrate(totalTime){
     conf.style.animationDuration=8+Math.random()*2+'s'; // 8–10s
     conf.style.transform=`rotate(${Math.random()*360}deg)`;
     document.body.appendChild(conf);
-    setTimeout(()=>conf.remove(),11000); // 11秒後に後始末
+    setTimeout(()=>conf.remove(),11000);
   }
 }
 function finishGame(){
@@ -126,6 +143,7 @@ document.getElementById('reset').addEventListener('click',()=>{
   score=0;attempts=0;updateScore();
   if(timerInterval){clearInterval(timerInterval);}startTime=null;timerP.textContent='Time: 0.0 s';
   render();
+  window.speechSynthesis.cancel();
 });
 // 初期表示
 render();
