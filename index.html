@@ -1,1 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Picture-Word Match</title>
+<style>
+/* ===== レイアウト & スタイル ===== */
+*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+body{margin:0;background:#f0f8ff}
+#container{display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{margin-bottom:20px}
+button{cursor:pointer;border:none;border-radius:8px;padding:10px 18px;
+       font-size:1rem;background:#2196f3;color:#fff}
+#modeBtns{display:flex;gap:20px}
+#gameControls{display:flex;gap:12px;margin-bottom:16px;justify-content:center;
+              width:100%;padding:10px;flex-wrap:wrap}
+#timer{font-weight:bold;font-size:1.1rem;color:#d32f2f}
+#gameArea{display:flex;width:100%;max-width:1200px}
+.area{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;width:50%;padding:0 10px}
+.img-card,.word-card{width:100%;height:100px;border-radius:12px;display:flex;
+                     align-items:center;justify-content:center;user-select:none;
+                     touch-action:none;transition:transform .25s}
+/* 文字を大きく・濃く */
+.img-card{font-size:2.5rem;background:#fff3e0;border:3px solid #ffb74d}
+.word-card{font-size:1.1rem;font-weight:600;background:#e3f2fd;border:3px solid #64b5f6;
+           cursor:grab;padding:6px;text-align:center;line-height:1.15;color:#000}
+.matched{opacity:.35;cursor:default}
+@keyframes flash{from{background:#c8e6c9}to{background:#fff3e0}}
+@keyframes shake{10%,90%{transform:translateX(-4px)}
+                 20%,80%{transform:translateX(4px)}
+                 30%,50%,70%{transform:translateX(-4px)}
+                 40%,60%{transform:translateX(4px)}}
+.correct-anim{animation:flash .3s}
+.wrong-anim{animation:shake .35s}
+/* スマホレイアウト */
+@media(max-width:480px){
+  #gameArea{flex-wrap:wrap}
+  .area{width:100%;grid-template-columns:repeat(2,1fr);gap:8px}
+  .img-card,.word-card{height:80px}
+  /* 文字を大きく・濃く（モバイル） */
+  .img-card{font-size:2rem}
+  .word-card{font-size:.9rem;font-weight:600;padding:4px}
+}
+/* ===== コンフェッティ Canvas ===== */
+#confettiCanvas{
+  position:fixed;inset:0;pointer-events:none;z-index:999;display:none;
+}
+/* すべての画像絵文字共通 */
+.emoji {
+  width: 1.2em;          /* 文字サイズを基準に揃える */
+  height: 1.2em;
+  vertical-align: -0.2em;/* ベースラインと高さを微調整 */
+}
+
+</style>
+</head>
+<body>
+<canvas id="confettiCanvas"></canvas>
+
+<div id="container">
+  <!-- スタート画面 -->
+  <div id="startScreen">
+    <h1>Picture-Word Match</h1>
+    <div id="modeBtns">
+      <button id="practiceBtn">Practice Mode</button>
+      <button id="trialBtn">30-Set Trial Mode</button>
+    </div>
+  </div>
+
+  <!-- ゲーム画面 -->
+  <div id="gameScreen" style="display:none;width:100%;flex-direction:column;align-items:center;">
+    <div id="gameControls">
+      <select id="categorySelect"></select>
+      <button id="startCategoryBtn">Start</button>
+      <button id="backBtn">Back</button>
+      <span id="timer" style="display:none;margin-left:20px;"></span>
+    </div>
+    <div id="gameArea">
+      <div id="imageArea" class="area"></div>
+      <div id="wordArea"  class="area"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- iOS 音声ロック解除 ---------- */
+const voicesReady=new Promise(res=>{
+  if(speechSynthesis.getVoices().length) return res();
+  speechSynthesis.onvoiceschanged=res;
+});
+function unlockIOS(){
+  if(window._iosUnlocked)return;
+  window._iosUnlocked=true;
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();osc.connect(ctx.destination);osc.start();osc.stop();
+  }catch{}
+  voicesReady.then(()=>{
+    const u=new SpeechSynthesisUtterance('ready');u.lang='en-US';u.volume=0;
+    speechSynthesis.speak(u);
+  });
+}
+['touchstart','mousedown','keydown'].forEach(ev=>{
+  document.addEventListener(ev,unlockIOS,{once:true});
+});
+
+
+/* ---------- 音声再生 ---------- */
+function speak(t){
+  voicesReady.then(()=>{
+    speechSynthesis.cancel();speechSynthesis.resume();
+    const u=new SpeechSynthesisUtterance(t);u.lang='en-US';
+    u.voice=speechSynthesis.getVoices().find(v=>v.lang.startsWith('en'))||null;
+    speechSynthesis.speak(u);
+  });
+}
+
+/* ---------- 冠詞付与 ---------- */
+function addArticle(w){
+  if(/\s/.test(w)||w.endsWith('.'))return w;
+  const noA=["bread","food","fun","snowing","raining","hot","cold","rice","milk","red","blue","green","yellow","black","white","orange","purple","brown",
+             "sunny","rainy","windy","cloudy","snowy","one","two","three","four","five","six","seven",
+             "eight","nine","ten","eleven","twelve"];
+  if(noA.includes(w.toLowerCase())||w.toLowerCase().endsWith('s'))return w;
+  return /^[aeiou]/i.test(w)?`an ${w}`:`a ${w}`;
+}
+
+/* ---------- コンフェッティ ---------- */
+function celebrate(){
+  const canvas=document.getElementById('confettiCanvas');
+  const ctx=canvas.getContext('2d');
+  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+  canvas.style.display='block';
+
+  const pieces=[...Array(200)].map(()=>({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height- canvas.height,
+    size:5+Math.random()*8,
+    fall:2+Math.random()*3,
+    swing:Math.random()*2,
+    hue:Math.random()*360
+  }));
+
+  let frame;
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      p.y+=p.fall;
+      p.x+=Math.sin(p.y*0.02)*p.swing;
+      if(p.y>canvas.height) p.y=-10;
+      ctx.fillStyle=`hsl(${p.hue},90%,60%)`;
+      ctx.beginPath();
+      ctx.rect(p.x,p.y,p.size,p.size);
+      ctx.fill();
+    });
+    frame=requestAnimationFrame(draw);
+  }
+  draw();
+  setTimeout(()=>{
+    cancelAnimationFrame(frame);
+    canvas.style.display='none';
+  },4000);
+}
+
+/* ---------- データ ---------- */
+/* ── 1. カテゴリ別単語リスト ───────────────────────── */
+const wordsByCat = {
+  "人物・役割 / People & Roles": [
+    "baby","friend","boy","classmates","bride",
+    "mother","father","sister","brother","grandpa"
+  ],
+  "衣類・アクセサリー / Clothes & Accessories": [
+    "helmet","boots","hat","hats","slippers","uniform",
+    "coat","coats","cap","shirt","shirts","pants/jeans","swimming trunks",
+    "tie","bag","bags","shoes"
+  ],
+  "身体の部位 / Body Parts": ["hand","hands"],
+  "食べ物・飲み物 / Food & Drinks": [
+    "food","milk","bread","rice","egg","eggs","apple","apples","cola",
+    "French fries","hamburger","vegetables","tomato"
+  ],
+  "日用品・道具 / Daily Goods & Tools": [
+    "glass","soccer ball","roller coaster","car","flowers","can","fan","rope",
+    "box","stick","snowman","umbrella","pen","pens","pencil","pencils",
+    "letter","bicycle","door","3 textbooks","book","books",
+    "cup","knife","mirror","basket ball","chocolate bar","chair","chairs","ladder"
+  ],
+  "動物 / Animals": [
+    "frog","dog","dogs","cat","cats","bird","birds","elephant","elephants"
+  ],
+  "自然 / Nature": ["moon","snow","sun","mountains","tree"],
+  "概念・活動 / Concepts & Activities": [
+    "fun","trouble","hurry","sport","day","soccer","baseball"
+  ],
+  "場所や設定 / Places & Settings": [
+    "hospital","toilet","pool",
+    "school","city",
+  ],
+  "感情 / Feelings": [
+    "I am mad.","I am surprised.","I am worried.","I am afraid.",
+    "I am happy.","I am sad.","I am tired.","I am hungry.","I am angry."
+  ],
+  "天気 / Weather": [
+    "sunny","raining","rainy","hot","cold","snowing","snowy","cloudy","windy"
+  ],
+  "動作 / Actions": [
+    "I touch a flower.","I raise my hand.","I drive a car.","I knock on a door.", "I catch a ball.","I drop a box.",
+    "I kick a ball.","I play games.","I pull a rope.","wiping","I put on a cap.","I am swimming.",
+    "cupping hands","saying something","I speak English.","I listen to music.","I order french fries.","I eat a hamburger.","I write a letter.",
+    "I am walking.","I am riding a bicycle.","I sit on an elephant.","I am standing.","I am about to sit on a chair.","They dressed up.",
+    "I read a book.","I am laughing.","I wash my face.","working hard","I cut paper.",
+    "I throw a ball.","jumping over the moon","I carry a bag.","I climb a cliff.","I bite an apple.","breaking heart",
+    "I sleep.","I run.","I drink juice.","I brush my teeth.","I eat sushi."
+  ],
+  "色 / Colors": [
+    "red","blue","green","yellow","black","white","orange","purple","brown"
+  ],
+  "数 / Numbers": [
+    "one","two","three","four","five","six","seven","eight","nine",
+    "ten","eleven","twelve"
+  ]
+};
+
+/* ── 2. 単語―絵文字対応表 ─────────────────────────── */
+const emoji = {
+  "baby":"👶🏻","friend":"🧍","boy":"👦🏻","classmates":"👩‍👩‍👦‍👦","bride":"👰🏻‍♀️",
+  "mother":"👩","father":"👨","sister":"👧","brother":"👦","grandpa":"👴",
+  "helmet":"🪖","boots":"👢👢","hat":"👒","hats":"👒👒🎩",
+  "slippers":"🩴🩴","uniform":"🎽","coat":"🧥","coats":"🧥🧥",
+  "cap":"🧢","shirt":"👕","shirts":"👕👕","swimming trunks":"🩳",
+  "tie":"👔","pants/jeans":"👖","bag":"👜","bags":"👜💼👜","shoes":"👟👟",
+  "hand":"🤚","hands":"👐",
+  "food":"🍙🍲🍖🥗","milk":"🥛","bread":"🍞","rice":"🍚","egg":"🥚","eggs":"🥚🥚",
+  "apple":"🍎","apples":"🍎🍎🍎","cola":"🥤","French fries":"🍟","hamburger":"🍔",
+  "vegetables":"🥬🥕🥦","tomato":"🍅",
+  "glass":"🥃","soccer ball":"⚽","roller coaster":"🎢","car":"🚗","flowers":"🌸🌸",
+
+  "can":"🥫","fan":"🪭","rope":"🪢","box":"📦","stick":"🦯",
+  "snowman":"⛄","umbrella":"☂️","pen":"🖊️","pens":"🖊️🖊️","pencil":"✏️",
+  "pencils":"✏️✏️","book":"📕","books":"📕📕","letter":"✉️","bicycle":"🚲",
+  "door":"🚪","3 textbooks":"📚","chair":"🪑","chairs":"🪑🪑",
+  "cup":"🍵","knife":"🔪","mirror":"🪞","basket ball":"🏀",
+  "chocolate bar":"🍫","ladder":"🪜",
+  "frog":"🐸","dog":"🐶","dogs":"🐶🐶","cat":"🐱","cats":"🐱🐱","bird":"🐦",
+  "birds":"🐦🐦🐦","elephant":"🐘","elephants":"🐘🐘",
+  "moon":"🌙","snow":"❄️","sun":"☀️","mountains":"🏔️","tree":"🌳",
+  "fun":"🎉","trouble":"⚠️","hurry":"⏰","sport":"🏅","day":"📅","soccer":"⚽",
+  "baseball":"⚾",
+  "hospital":"🏥",
+  "toilet":"🚽","pool":"🏊‍♂️",
+  "school":"🏫","city":"🏙️",
+  "I am mad.":"😡","I am surprised.":"😲","I am worried.":"😟","I am afraid.":"😱",
+  "I am happy.":"😊","I am sad.":"😢","I am tired.":"🥱","I am hungry.":"🤤",
+  "I am angry.":"😠",
+  "sunny":"☀️","raining":"🌧️","rainy":"🌧️","hot":"🥵","cold":"🥶",
+  "snowing":"🌨️","snowy":"❄️","cloudy":"☁️","windy":"🌬️",
+  "I touch a flower.":"🤏🌸",
+  "I raise my hand.":"🙋‍♂️",
+  "I drive a car.":"🚗","I knock on a door.":"🤌🏽🚪",
+  "I am standing.":"🧍","I catch a ball.":"🏀🤲","I drop a box.":"🫱🏼📦","I kick a ball.":"🦵🏈","I play games.":"🎮",
+  "I pull a rope.":"🫴🏼🪢","wiping":"🧻","I put on a cap.":"🧢","I am swimming.":"🏊‍♂️",
+  "cupping hands":"🤲","saying something":"💬","I speak English.":"🗣️🆒","I listen to music.":"👂🎼","I order french fries.":"👆🏼🍟",
+  "I eat a hamburger.":"🍽️🍔","I write a letter.":"✉️✍️","I am walking.":"🚶‍♂️","I am riding a bicycle.":"🚴‍♂️",
+  "I sit on an elephant.":"🪑🐘","I am about to sit on a chair.":"🪑","They dressed up.":"🎩👗",
+  "I read a book.":"📖","I am laughing.":"😂","I wash my face.":"🧼😊","working hard":"💪",
+  "I cut paper.":"✂️🧻","I throw a ball.":"🤽‍♂️","jumping over the moon":"🌙🤾‍♂️",
+  "I carry a bag.":"🧺","I climb a cliff.":"🧗‍♂️","I bite an apple.":"🦷🍎","breaking heart":"💔",
+  "I sleep.":"😴","I run.":"🏃","I drink juice.":"🧃",
+  "I brush my teeth.":"🪥🦷🦷","I eat sushi.":"🍣🥢",
+  "red":"🟥","blue":"🟦","green":"🟩","yellow":"🟨","black":"⬛","white":"⬜",
+  "orange":"🟧","purple":"🟪","brown":"🟫",
+  "one":"1️⃣","two":"2️⃣","three":"3️⃣","four":"4️⃣","five":"5️⃣","six":"6️⃣",
+  "seven":"7️⃣","eight":"8️⃣","nine":"9️⃣","ten":"🔟","eleven":"1️⃣1️⃣",
+  "twelve":"1️⃣2️⃣"
+};
+
+function renderEmoji(word) {
+  const item = emoji[word];
+  if (!item) return "";               // 登録がなければ空文字
+  if (item.startsWith("match/")) {      // 画像なら <match>
+    return `<img src="${item}" alt="${word}" class="emoji">`;
+  }
+  return item;                        // 文字絵文字ならそのまま
+}
+
+/* ---------- 状態 --------- */
+let draggedWord=null,touchClone=null,timerInt=null;
+
+/* ---------- ボード生成 ---------- */
+function buildBoard(mode){
+  const imgArea=document.getElementById('imageArea');
+  const wordArea=document.getElementById('wordArea');
+  imgArea.innerHTML='';wordArea.innerHTML='';
+
+  const all=Object.values(wordsByCat).flat();
+  const pick=mode==='trial'?all.sort(()=>.5-Math.random()).slice(0,30)
+                           :wordsByCat[document.getElementById('categorySelect').value];
+
+  pick.sort(()=>.5-Math.random()).forEach(w=>{
+    const d=document.createElement('div');d.className='img-card';
+    d.textContent=emoji[w]||w;d.dataset.word=w;
+    d.addEventListener('dragover',e=>e.preventDefault());
+    d.addEventListener('drop',handleDrop);imgArea.appendChild(d);
+  });
+
+  pick.sort(()=>.5-Math.random()).forEach(w=>{
+    const d=document.createElement('div');d.className='word-card';
+    d.textContent=addArticle(w);d.dataset.word=w;d.draggable=true;
+    d.addEventListener('dragstart',()=>{draggedWord=w;speak(addArticle(w));});
+    d.addEventListener('click',()=>speak(addArticle(w)));wordArea.appendChild(d);
+  });
+}
+
+/* ---------- ドロップ判定 & クリア演出 ---------- */
+function handleDrop(e){
+  const img=e.currentTarget;
+  if(img.dataset.word!==draggedWord){
+    img.classList.add('wrong-anim');setTimeout(()=>img.classList.remove('wrong-anim'),350);
+    return;
+  }
+  img.classList.add('matched','correct-anim');
+  const pair=document.querySelector(`.word-card[data-word="${draggedWord}"]`);
+  pair?.classList.add('matched','correct-anim');
+
+  setTimeout(()=>{
+    img.style.display='none';pair&&(pair.style.display='none');
+
+    const remain=document.querySelectorAll('.img-card:not([style*="display: none"])').length;
+    if(remain===0){           /* すべて揃った！ */
+      /* Trial モードのときはタイマー停止 */
+      const timerEl=document.getElementById('timer');
+      const isTrial=timerEl.style.display==='inline';
+      let sec='';
+      if(isTrial){
+        clearInterval(timerInt);
+        sec=timerEl.textContent.replace('Time: ','').replace('s','');
+        speak(`${sec} seconds! Congratulations!`);
+      }else{
+        speak('Well done! Congratulations!');
+      }
+      celebrate();            /* ★ コンフェッティ */
+      alert(isTrial?`Finished in ${sec} seconds! 🎉`:'Great job! 🎉');
+    }
+  },200);
+}
+
+/* ---------- タッチドラッグ ---------- */
+document.addEventListener('touchstart',e=>{
+  const base=e.target.closest('.word-card');
+  if(!base||base.classList.contains('matched'))return;
+  draggedWord=base.dataset.word;speak(addArticle(draggedWord));
+  touchClone=base.cloneNode(true);
+  Object.assign(touchClone.style,{position:'absolute',pointerEvents:'none',zIndex:1000,opacity:.7,
+    width:base.offsetWidth+'px',height:base.offsetHeight+'px',
+    lineHeight:getComputedStyle(base).lineHeight,fontSize:getComputedStyle(base).fontSize,
+    padding:getComputedStyle(base).padding});document.body.appendChild(touchClone);
+});
+document.addEventListener('touchmove',e=>{
+  if(!touchClone||!e.touches.length)return;
+  const t=e.touches[0];
+  touchClone.style.left=(t.pageX-touchClone.offsetWidth/2)+'px';
+  touchClone.style.top =(t.pageY-touchClone.offsetHeight/2)+'px';
+});
+document.addEventListener('touchend',e=>{
+  if(!touchClone)return;
+  const el=document.elementFromPoint(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+  const img=el?.closest('.img-card');if(img)handleDrop({currentTarget:img});
+  touchClone.remove();touchClone=null;
+});
+
+/* ---------- タイマー ---------- */
+function startTimer(){
+  const tm=document.getElementById('timer');const st=Date.now();
+  clearInterval(timerInt);
+  timerInt=setInterval(()=>tm.textContent='Time: '+Math.floor((Date.now()-st)/1000)+'s',500);
+}
+
+/* ---------- 游戏開始 ---------- */
+function startGame(mode){
+  document.getElementById('startScreen').style.display='none';
+  const gs=document.getElementById('gameScreen');gs.style.display='flex';
+  const sel=document.getElementById('categorySelect');
+  const st=document.getElementById('startCategoryBtn');
+  const tm=document.getElementById('timer');
+  if(mode==='trial'){
+    sel.style.display='none';st.style.display='none';tm.style.display='inline';
+    startTimer();buildBoard('trial');
+  }else{
+    sel.style.display='inline';st.style.display='inline';tm.style.display='none';
+  }
+}
+
+/* ---------- 初期化 ---------- */
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('practiceBtn').addEventListener('click',()=>startGame('practice'));
+  document.getElementById('trialBtn').addEventListener('click',   ()=>startGame('trial'));
+  document.getElementById('backBtn').addEventListener('click',()=>{
+    document.getElementById('gameScreen').style.display='none';
+    document.getElementById('startScreen').style.display='block';
+  });
+  document.getElementById('startCategoryBtn').addEventListener('click',()=>buildBoard('practice'));
+  const sel=document.getElementById('categorySelect');
+  Object.keys(wordsByCat).forEach(c=>{
+    const o=document.createElement('option');o.value=o.textContent=c;sel.appendChild(o);
+  });
+  speechSynthesis.getVoices(); // preload
+});
+</script>
+</body>
+</html>
 
